@@ -1,7 +1,7 @@
 import argparse
 import datetime as dt
 from pathlib import Path
-from typing import List, Iterable, Optional, Callable, Any, Dict
+from typing import List, Iterable, Optional, Callable, Any, Dict, Sequence
 
 import submitit
 
@@ -13,12 +13,29 @@ def _job_start_time(job: submitit.Job):
     return dt.datetime.fromtimestamp(job._start_time)
 
 
+def _extract_common_params(
+    list_of_params: Sequence[argparse.Namespace],
+) -> Dict[str, Any]:
+    if not list_of_params:
+        return {}
+
+    common_params = vars(list_of_params[0])
+    for params in list_of_params[1:]:
+        params = vars(params)
+        for k, v in tuple(common_params.items()):
+            if k not in params or v != params[k]:
+                del common_params[k]
+        if not common_params:
+            break
+    return common_params
+
+
 class Experiment:
     def __init__(
         self,
         name: str,
         job_func: Callable,
-        job_params: Iterable[argparse.Namespace],
+        job_params: Sequence[argparse.Namespace],
         job_desc_function: Optional[Callable] = None,
         submititnow_dir: Optional[str] = None,
     ):
@@ -37,11 +54,7 @@ class Experiment:
     def job_function_description(self):
         func_name = self.job_func.__module__ + "." + self.job_func.__qualname__
 
-        common_params = vars(self.job_params[0])
-        for param in self.job_params[1:]:
-            for k, v in vars(param).items():
-                if k in common_params and v != common_params[k]:
-                    del common_params[k]
+        common_params = _extract_common_params(self.job_params)
 
         tokens = []
         for k, v in common_params.items():
